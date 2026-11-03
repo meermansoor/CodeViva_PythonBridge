@@ -27,6 +27,17 @@ if TYPE_CHECKING:
     from agents.report_agent import process_teacher_dashboard_data, export_session_to_excel
 else:
     # Runtime: When 'agents' is in sys.path
+    import importlib
+    import speech_agent
+    import evaluator_agent
+    import viva_controller
+    import report_agent
+
+    importlib.reload(speech_agent)
+    importlib.reload(evaluator_agent)
+    importlib.reload(viva_controller)
+    importlib.reload(report_agent)
+
     from speech_agent import transcribe_and_verify
     from evaluator_agent import evaluate_answer
     from viva_controller import viva_controller_app
@@ -62,6 +73,7 @@ class EvaluateRequest(BaseModel):
     question_data: Dict[str, Any]
     total_viva_marks: float = 15.0
     total_questions: int = 5
+    difficulty: Optional[str] = "Moderate"
 
 
 class VivaActionRequest(BaseModel):
@@ -133,11 +145,19 @@ def evaluate(payload: EvaluateRequest):
     Evaluates a student transcript against question keywords.
     Returns: { score, max_marks, feedback, matched_keywords, missed_keywords, accuracy_percentage }
     """
-    result = evaluate_answer(
-        student_answer=payload.transcript,
-        question_data=payload.question_data,
-        total_questions=payload.total_questions
-    )
+    try:
+        result = evaluate_answer(
+            student_answer=payload.transcript,
+            question_data=payload.question_data,
+            total_questions=payload.total_questions,
+            difficulty=payload.difficulty or "Moderate"
+        )
+    except TypeError:
+        result = evaluate_answer(
+            student_answer=payload.transcript,
+            question_data=payload.question_data,
+            total_questions=payload.total_questions
+        )
     return result
 
 
@@ -244,5 +264,5 @@ def excel_export(payload: ExcelRequest):
 if __name__ == "__main__":
     import uvicorn
     print("Starting Viva Agents Bridge on http://localhost:8100")
-    # FIX: Provide app as import string to enable reload safely without crashing
-    uvicorn.run("bridge_server:app", host="0.0.0.0", port=8100, reload=True)
+    agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'agents'))
+    uvicorn.run("bridge_server:app", host="0.0.0.0", port=8100, reload=True, reload_dirs=[agents_dir, os.path.dirname(__file__)])
